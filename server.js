@@ -1,11 +1,13 @@
 // Pingvin Muzeyi — statik fayllar + WebSocket (kutubxonasiz, faqat Node 18+)
 const http=require("http"),fs=require("fs"),path=require("path"),crypto=require("crypto");
-const PORT=process.env.PORT||3000,PUB=path.join(__dirname,"public"),MAXCONN=500;
+const PORT=process.env.PORT||3000,PUB0=path.join(__dirname,"public"),FLAT=!fs.existsSync(PUB0),PUB=FLAT?__dirname:PUB0,MAXCONN=500;
+const FILES=["/index.html","/net.js","/sw.js","/manifest.webmanifest","/icon-192.png","/icon-512.png"]; // fayllar bitta papkada tursa faqat shular beriladi
 const MIME={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css",".ico":"image/x-icon",".png":"image/png",".svg":"image/svg+xml",".webmanifest":"application/manifest+json"};
 const server=http.createServer((req,res)=>{
   let u;try{u=decodeURIComponent(req.url.split("?")[0]);}catch{res.writeHead(400);return res.end();}
   if(u==="/healthz")return res.end("ok");
   if(u==="/")u="/index.html";
+  if(FLAT&&!FILES.includes(u)){res.writeHead(404);return res.end("404");}
   const f=path.join(PUB,path.normalize(u));
   if(!f.startsWith(PUB+path.sep)){res.writeHead(403);return res.end();}
   fs.readFile(f,(e,d)=>{
