@@ -29,9 +29,9 @@ function joinRoom(n){
 }
 function connect(){
   ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws");
-  ws.onopen=function(){tries=0;for(var n in rooms)rooms[n]._open();};
+  ws.onopen=function(){tries=0;for(var n in rooms)rooms[n]._open();mh.forEach(function(h){h({t:"_open"});});};
   ws.onmessage=function(e){var m;try{m=JSON.parse(e.data);}catch(_){return;}
-    if(m.t==="you")myId=m.id;else if(/^mf/.test(m.t))mh.forEach(function(h){h(m);});else if(m.t==="peers"&&rooms[m.r])rooms[m.r]._in(m.peers);};
+    if(m.t==="you")myId=m.id;else if(/^(mf|v_)/.test(m.t))mh.forEach(function(h){h(m);});else if(m.t==="peers"&&rooms[m.r])rooms[m.r]._in(m.peers);};
   ws.onclose=function(){mh.forEach(function(h){h({t:"mf_out"});});for(var n in rooms)rooms[n].ok=false;setTimeout(connect,Math.min(5000,500*(++tries)));};
   ws.onerror=function(){};
 }
