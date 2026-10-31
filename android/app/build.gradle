@@ -1,0 +1,26 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'uz.pingvin.muzey'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'uz.pingvin.muzey'
+        minSdk 24
+        targetSdk 34
+        versionCode 2
+        versionName '2.0'
+    }
+    buildTypes { release { minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+/* ../public papkasi APK ichiga "www" nomi bilan qo'shiladi (sw.js va manifest APKda kerak emas) */
+def wwwDir = layout.buildDirectory.dir('www_assets')
+tasks.register('copyWww', Copy) {
+    from("${rootDir}/../public") { exclude 'sw.js' }
+    into(wwwDir.map { it.dir('www') })
+}
+android.sourceSets.main.assets.srcDirs += wwwDir.get().asFile
+tasks.matching { it.name.startsWith('merge') && it.name.endsWith('Assets') }.configureEach { dependsOn 'copyWww' }
+
+dependencies { implementation 'androidx.webkit:webkit:1.11.0' }

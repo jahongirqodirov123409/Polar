@@ -1,20 +1,36 @@
 // Pingvin Muzeyi — statik fayllar + WebSocket (kutubxonasiz, faqat Node 18+)
 const http=require("http"),fs=require("fs"),path=require("path"),crypto=require("crypto");
-const PORT=process.env.PORT||3000,PUB0=path.join(__dirname,"public"),FLAT=!fs.existsSync(PUB0),PUB=FLAT?__dirname:PUB0,MAXCONN=500;
-const FILES=["/index.html","/net.js","/sw.js","/manifest.webmanifest","/icon-192.png","/icon-512.png","/penguin.glb","/panda.glb","/monkey.glb"]; // fayllar bitta papkada tursa faqat shular beriladi
-const MIME={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css",".ico":"image/x-icon",".png":"image/png",".svg":"image/svg+xml",".webmanifest":"application/manifest+json",".glb":"model/gltf-binary"};
+const PORT=process.env.PORT||3000,PUB=path.join(__dirname,"public"),MAXCONN=500;
+const MIME={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css",".ico":"image/x-icon",".png":"image/png",".svg":"image/svg+xml",".webmanifest":"application/manifest+json"};
+const zlib=require("zlib");
+const CACHE=new Map(); // fayl -> {raw,gz,etag,type}; xotirada saqlanadi, har so'rovda diskdan o'qilmaydi
+function load(f){
+  let c=CACHE.get(f);
+  try{const st=fs.statSync(f);if(c&&c.mt===st.mtimeMs)return c;
+    const raw=fs.readFileSync(f),type=MIME[path.extname(f)]||"application/octet-stream",
+      text=/^(text|application\/(json|manifest|javascript))|svg/.test(type)||/charset/.test(type);
+    c={raw,gz:text&&raw.length>600?zlib.gzipSync(raw,{level:9}):null,type,mt:st.mtimeMs,
+      etag:'"'+crypto.createHash("md5").update(raw).digest("hex").slice(0,16)+'"'};
+    CACHE.set(f,c);return c;
+  }catch{return null;}
+}
 const server=http.createServer((req,res)=>{
   let u;try{u=decodeURIComponent(req.url.split("?")[0]);}catch{res.writeHead(400);return res.end();}
   if(u==="/healthz")return res.end("ok");
   if(u==="/")u="/index.html";
-  if(FLAT&&!FILES.includes(u)){res.writeHead(404);return res.end("404");}
   const f=path.join(PUB,path.normalize(u));
   if(!f.startsWith(PUB+path.sep)){res.writeHead(403);return res.end();}
-  fs.readFile(f,(e,d)=>{
-    if(e){res.writeHead(404);return res.end("404");}
-    res.writeHead(200,{"Content-Type":MIME[path.extname(f)]||"application/octet-stream","Cache-Control":"no-cache"});res.end(d);
-  });
+  const c=load(f);if(!c){res.writeHead(404);return res.end("404");}
+  const h={"Content-Type":c.type,"ETag":c.etag,"Vary":"Accept-Encoding",
+    // html va sw.js har safar tekshiriladi (304 juda tez), qolgan fayllar brauzerda 1 soat turadi
+    "Cache-Control":/\.(html|webmanifest)$|sw\.js$/.test(f)?"no-cache":"public, max-age=3600"};
+  if(req.headers["if-none-match"]===c.etag){res.writeHead(304,h);return res.end();}
+  const gz=c.gz&&/\bgzip\b/.test(req.headers["accept-encoding"]||"");
+  if(gz)h["Content-Encoding"]="gzip";
+  h["Content-Length"]=(gz?c.gz:c.raw).length;
+  res.writeHead(200,h);res.end(req.method==="HEAD"?undefined:(gz?c.gz:c.raw));
 });
+server.keepAliveTimeout=65000;
 
 /* ---- minimal WebSocket ---- */
 function frame(op,data){const n=data.length;let h;
@@ -43,47 +59,68 @@ function parse(s,chunk){
   }
 }
 
-/* ---- xonalar va presence ---- */
-const rooms=new Map();let nid=1,conns=0;
+/* ---- xonalar va presence (delta protokol: faqat o'zgarganlar yuboriladi) ---- */
+const rooms=new Map(),ALL=new Set();let nid=1,conns=0;
 const NAME=/^[a-z0-9][a-z0-9_.-]{0,47}$/;
-function flush(n){const r=rooms.get(n);if(!r)return;r.dirty=false;
-  const msg={t:"peers",r:n,peers:[...r.m.values()].map(v=>({id:v.id,p:v.p}))};
-  for(const s of r.m.keys())send(s,msg);}
-function mark(n){const r=rooms.get(n);if(r&&!r.dirty){r.dirty=true;setTimeout(()=>flush(n),40);}}
-function leave(s,n){const r=rooms.get(n);if(!r||!r.m.delete(s))return;s.rooms.delete(n);if(r.m.size)mark(n);else rooms.delete(n);}
-/* ---- ovozli aloqa: faqat signal uzatadi (ovozning o'zi brauzerlar orasida to'g'ridan-to'g'ri ketadi) ---- */
-const voice=new Map(),byId=new Map();
-function vleave(s){const g=s.vs&&voice.get(s.vs);if(g){g.delete(s);for(const o of g)send(o,{t:"v_gone",id:s.id});if(!g.size)voice.delete(s.vs);}s.vs=null;}
-function vMsg(s,m){
-  if(m.t==="v_join"){
-    vleave(s);
-    const sc=m.s==="mf"?(s.mf?"mf:"+s.mf.r.salt.toString("hex").slice(0,16):null):"lobby";
-    if(!sc)return send(s,{t:"v_full"});
-    let g=voice.get(sc);if(!g)voice.set(sc,g=new Set());
-    if(g.size>=(sc==="lobby"?8:10))return send(s,{t:"v_full"});
-    send(s,{t:"v_peers",ids:[...g].map(o=>o.id)});g.add(s);s.vs=sc;
-  }else if(m.t==="v_leave")vleave(s);
-  else if(m.t==="v_sig"){const o=byId.get(m.to);if(o&&o.vs&&o.vs===s.vs)send(o,{t:"v_sig",from:s.id,d:m.d});}
-}
+const isGame=n=>n!=="lobby"; // o'yin xonalari: zudlik bilan; lobbi: 60 ms to'plab
+function snap(r){return [...r.m.values()].map(v=>({id:v.id,p:v.p}));}
+function flush(n){const r=rooms.get(n);if(!r)return;r.timer=null;
+  if(!r.up.size&&!r.gone.size)return;
+  const u=[...r.up].map(s=>{const v=r.m.get(s);return v&&{id:v.id,p:v.p};}).filter(Boolean),l=[...r.gone];
+  r.up.clear();r.gone.clear();
+  for(const s of r.m.keys()){
+    if(s.mute&&s.mute.has(n))continue;   // o'yin stolida o'tirgan mijozga lobbi trafigi yuborilmaydi
+    // o'z yangilanishini o'ziga qaytarmaymiz (trafik tejaladi); mijoz o'zini o'zi biladi
+    const mine=u.filter(x=>x.id!==s.id);
+    if(mine.length||l.length)send(s,{t:"pd",r:n,u:mine,l});
+  }}
+function mark(n,s,gone){const r=rooms.get(n);if(!r)return;
+  if(gone)r.gone.add(gone);else if(s)r.up.add(s);
+  if(!r.timer)r.timer=isGame(n)?setTimeout(()=>flush(n),0):setTimeout(()=>flush(n),80);}
+function leave(s,n){const r=rooms.get(n);if(!r||!r.m.delete(s))return;s.rooms.delete(n);r.up.delete(s);
+  if(r.m.size)mark(n,null,s.id);else{if(r.timer){clearTimeout(r.timer);}rooms.delete(n);}}
 function onMsg(s,raw){
   let m;try{m=JSON.parse(raw);}catch{return;}
-  if(m&&typeof m.t==="string"&&m.t.slice(0,2)==="v_")return vMsg(s,m);
-  if(m&&typeof m.t==="string"&&m.t.slice(0,3)==="mf_")return mfMsg(s,m);
-  const n=m&&m.r;if(typeof n!=="string"||!NAME.test(n))return;
+  if(!m||typeof m.t!=="string")return;
+  if(m.t.slice(0,3)==="mf_")return mfMsg(s,m);
+  if(m.t==="rtc")return relay(s,m);
+  if(m.t==="mute"){ // {t:"mute",r:"lobby",on:true|false}
+    const n2=m.r,r2=rooms.get(n2);if(typeof n2!=="string"||!r2||!r2.m.has(s))return;
+    s.mute=s.mute||new Set();
+    if(m.on)s.mute.add(n2);else if(s.mute.delete(n2))send(s,{t:"peers",r:n2,peers:snap(r2)});
+    return;}
+  if(m.t==="ping")return send(s,{t:"pong",c:m.c});
+  const n=m.r;if(typeof n!=="string"||!NAME.test(n))return;
   if(m.t==="join"){
-    if(s.rooms.has(n))return mark(n);
+    if(s.rooms.has(n)){const r=rooms.get(n);if(r)send(s,{t:"peers",r:n,peers:snap(r),chat:r.chat||[]});return;}
     if(s.rooms.size>=8)return;
-    let r=rooms.get(n);if(!r)rooms.set(n,r={m:new Map(),dirty:false});
-    r.m.set(s,{id:s.id,p:{}});s.rooms.add(n);mark(n);
+    let r=rooms.get(n);if(!r)rooms.set(n,r={m:new Map(),up:new Set(),gone:new Set(),timer:null,chat:[]});
+    r.m.set(s,{id:s.id,p:{}});s.rooms.add(n);
+    send(s,{t:"peers",r:n,peers:snap(r),chat:r.chat});   // yangi kelganga to'liq holat
+    mark(n,s);                                             // boshqalarga faqat yangi odam
   }else if(m.t==="pres"){
     const r=rooms.get(n),v=r&&r.m.get(s);
     if(!v||!m.p||typeof m.p!=="object"||Array.isArray(m.p))return;
     const np={...v.p};
     for(const k of Object.keys(m.p)){if(k==="__proto__")continue;if(m.p[k]===null)delete np[k];else np[k]=m.p[k];}
     if(JSON.stringify(np).length>4096)return;
-    v.p=np;mark(n);
+    v.p=np;mark(n,s);
+  }else if(m.t==="chat"){
+    const r=rooms.get(n);if(!r||!r.m.has(s))return;
+    const text=String(m.text||"").replace(/\s+/g," ").trim().slice(0,160),now=Date.now();
+    if(!text||now-(s.ct2||0)<500)return;s.ct2=now;
+    const nick=String(m.nick||"Mehmon").replace(/\s+/g," ").trim().slice(0,16)||"Mehmon";
+    const msg={id:s.id,n:nick,x:text,ts:now};
+    r.chat.push(msg);if(r.chat.length>30)r.chat.shift();
+    for(const o of r.m.keys())send(o,{t:"chat",r:n,m:msg});
   }else if(m.t==="leave")leave(s,n);
 }
+/* WebRTC signal: faqat bir xonadagi odamga uzatiladi (ovozli aloqa) */
+function relay(s,m){
+  const to=String(m.to||"");if(!to||to===s.id)return;
+  const d=JSON.stringify(m.d||{});if(d.length>6000)return;
+  for(const n of s.rooms){const r=rooms.get(n);if(!r)continue;
+    for(const o of r.m.keys())if(o.id===to){send(o,{t:"rtc",from:s.id,d:m.d,k:m.k});return;}}}
 /* ---- Mafiya (server hakam: rollar faqat serverda, mijozga faqat o'ziniki yuboriladi) ---- */
 const MF=new Map(),ROLE={mafia:"Mafiya",doc:"Doktor",det:"Komissar",civ:"Tinch aholi"};
 const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;};
@@ -95,7 +132,7 @@ function mfView(r,me){
   if(r.ph==="day")for(const p of r.pl.values())if(p.pick)cnt[p.pick]=(cnt[p.pick]||0)+1;
   return{n:r.name,ph:r.ph,d:r.d,w:r.w,host:me.id===r.host,left:Math.max(0,Math.ceil((r.dl-Date.now())/1000)),
     me:{id:me.id,role:me.role,alive:me.alive,pick:me.pick,priv:me.priv},
-    pl:live(r).concat([...r.pl.values()].filter(p=>p.left)).map(p=>({id:p.id,nick:p.nick,alive:p.alive,c:p.c,votes:cnt[p.id]||0,
+    pl:live(r).concat([...r.pl.values()].filter(p=>p.left)).map(p=>({id:p.id,nick:p.nick,alive:p.alive,votes:cnt[p.id]||0,
       role:(end||p===me||!p.alive||(me.role==="mafia"&&p.role==="mafia"))?p.role:null})),
     log:r.log.slice(-10),chat:r.chat.slice(-12)};}
 const mfSend=r=>{for(const p of r.pl.values())if(!p.left)send(p.s,{t:"mf",s:mfView(r,p)});};
@@ -140,7 +177,7 @@ function mfAct(r,p,to){
   }else return;
   mfSend(r);}
 function mfLeave(s,quiet){
-  const p=s.mf;if(!p)return;const r=p.r;s.mf=null;if(s.vs&&s.vs.slice(0,3)==="mf:")vleave(s);
+  const p=s.mf;if(!p)return;const r=p.r;s.mf=null;
   if(r.ph==="lobby"||r.ph==="end")r.pl.delete(p.id);else{p.alive=false;p.left=true;r.log.push("🚪 "+p.nick+" o'yindan chiqib ketdi");}
   const L=live(r);
   if(!L.length){clearTimeout(r.t);MF.delete(r.name);}
@@ -156,7 +193,7 @@ function mfMsg(s,m){
       if(r)return mfErr(s,"Bu nomli xona allaqachon bor");
       if(MF.size>=50)return mfErr(s,"Serverda xonalar to'lib ketgan");
       const salt=crypto.randomBytes(16);
-      r={name,salt,hash:hpw(pw,salt),pl:new Map(),host:null,ph:"lobby",d:0,chat:[],cq:0,log:[],t:null,dl:0,w:null};MF.set(name,r);
+      r={name,salt,hash:hpw(pw,salt),pl:new Map(),host:null,ph:"lobby",d:0,chat:[],log:[],t:null,dl:0,w:null};MF.set(name,r);
     }else{
       if(!r)return mfErr(s,"Bunday xona yo'q");
       if((s.bad||0)>=8)return mfErr(s,"Juda ko'p noto'g'ri urinish");
@@ -164,7 +201,7 @@ function mfMsg(s,m){
       if(r.ph!=="lobby"&&r.ph!=="end")return mfErr(s,"O'yin allaqachon boshlangan");
       if(live(r).length>=10)return mfErr(s,"Xona to'la (10/10)");
     }
-    const p={id:s.id,s,r,nick,c:Math.max(0,Math.min(10,m.c|0)),role:null,alive:true,pick:null,priv:[]};
+    const p={id:s.id,s,r,nick,role:null,alive:true,pick:null,priv:[]};
     r.pl.set(s.id,p);if(!r.host)r.host=s.id;s.mf=p;mfSend(r);return;
   }
   const p=s.mf;if(!p)return;const r=p.r;
@@ -177,22 +214,23 @@ function mfMsg(s,m){
   if(m.t==="mf_chat"){
     const t=String(m.text||"").trim().slice(0,140),now=Date.now();
     if(!t||now-(s.ct||0)<700||r.ph==="night"||(r.ph==="day"&&!p.alive))return;
-    s.ct=now;r.chat.push({n:p.nick,t,i:p.id,q:++r.cq});if(r.chat.length>40)r.chat.shift();mfSend(r);}
+    s.ct=now;r.chat.push({n:p.nick,t});if(r.chat.length>40)r.chat.shift();mfSend(r);}
 }
 server.on("upgrade",(req,s)=>{
   const key=req.headers["sec-websocket-key"];
   if(req.url.split("?")[0]!=="/ws"||String(req.headers.upgrade).toLowerCase()!=="websocket"||!key||conns>=MAXCONN){s.destroy();return;}
   s.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+
     crypto.createHash("sha1").update(key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64")+"\r\n\r\n");
-  s.id="p"+(nid++).toString(36)+Math.random().toString(36).slice(2,6);byId.set(s.id,s);
-  s.rooms=new Set();s.buf=Buffer.alloc(0);s.alive=true;conns++;
+  s.setNoDelay(true);s.setKeepAlive(true,20000);
+  s.id="p"+(nid++).toString(36)+Math.random().toString(36).slice(2,6);
+  s.rooms=new Set();s.buf=Buffer.alloc(0);s.alive=true;conns++;ALL.add(s);
   s.on("data",d=>parse(s,d));
   s.on("error",()=>{});
-  s.on("close",()=>{conns--;vleave(s);byId.delete(s.id);mfLeave(s,true);[...s.rooms].forEach(n=>leave(s,n));});
+  s.on("close",()=>{conns--;ALL.delete(s);mfLeave(s,true);[...s.rooms].forEach(n=>leave(s,n));});
   send(s,{t:"you",id:s.id});
 });
 setInterval(()=>{ // o'lik ulanishlarni tozalash + proksi uzib qo'ymasligi uchun ping
-  for(const r of rooms.values())for(const s of r.m.keys()){
+  for(const s of ALL){
     if(!s.alive){s.destroy();continue;}s.alive=false;if(s.writable)s.write(frame(9,Buffer.alloc(0)));}
 },25000);
 server.listen(PORT,()=>console.log("Pingvin Muzeyi: http://localhost:"+PORT));
