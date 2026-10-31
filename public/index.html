@@ -135,6 +135,65 @@ button{font:inherit;color:inherit}
 #emp{grid-template-columns:repeat(4,1fr)}#emp button{padding:10px 2px;border-radius:12px;border:2px solid var(--line);background:var(--panel);font-size:12px}#emp i{display:block;font-style:normal;font-size:28px}
 #gc{width:min(94vw,440px);display:grid;gap:6px;margin-top:6px}#gc[hidden]{display:none}
 #cnick{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}#cnick input{flex:1;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:inherit;font-size:14px;min-width:0;-webkit-user-select:text;user-select:text}
+
+/* ===== GORIZONTAL (landscape) REJIM ===== */
+/* Telefon tik turganda: "Telefonni yoting" ekrani (o'tkazib yuborish mumkin) */
+#rot{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:var(--bg);text-align:center;padding:24px}
+#rot .box{display:grid;gap:14px;justify-items:center;max-width:320px}
+#rot svg{width:92px;height:92px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;animation:rotp 2.6s ease-in-out infinite}
+#rot p{margin:0;font:400 22px/1.3 var(--font-display);text-wrap:balance}
+#rot small{color:var(--muted);font-size:13px}
+#rot button{padding:10px 18px;border-radius:99px;border:1px solid var(--line);background:var(--panel);font-weight:700;cursor:pointer}
+@keyframes rotp{0%,25%{transform:rotate(0)}65%,100%{transform:rotate(-90deg)}}
+@media (prefers-reduced-motion:reduce){#rot svg{animation:none}}
+@media (orientation:portrait) and (pointer:coarse){#rot:not(.off){display:grid}}
+
+/* Past ekran (telefon yotganda balandlik ~300-450px): HUD ixchamlashadi */
+@media (orientation:landscape) and (max-height:520px){
+  :root{--sb:env(safe-area-inset-bottom,0px);--sl:max(16px,env(safe-area-inset-left,0px));--sr:max(16px,env(safe-area-inset-right,0px))}
+  #place{top:calc(8px + env(safe-area-inset-top,0px));max-width:min(42vw,320px)}
+  #place .k{font-size:10px}
+  #place .n{font-size:22px;margin-top:4px}
+  #caption{margin-top:7px;padding:6px 10px 7px}#caption .t{font-size:15px}#caption .s{font-size:10px}
+  #mini{top:calc(8px + env(safe-area-inset-top,0px));gap:5px}
+  #map{width:72px;height:72px}#count{font-size:11px;padding:5px 9px}
+  #joy{width:112px;height:112px;bottom:calc(14px + var(--sb))}
+  #knob{width:50px;height:50px;margin:-25px 0 0 -25px}
+  #touch{bottom:calc(14px + var(--sb));gap:6px}
+  #touchBtn{width:72px;height:72px}#touchBtn svg{width:30px;height:30px}
+  #touchLabel{font-size:11px;padding:6px 10px}
+  #side{left:calc(var(--sl) + 128px);bottom:calc(14px + var(--sb));gap:6px}
+  #side button{width:40px;height:40px;font-size:18px}
+  #hint{bottom:calc(64px + var(--sb));width:min(54vw,430px);font-size:12px;padding:7px 12px}
+  #gp{bottom:calc(66px + var(--sb))}#gp button{padding:9px 14px;font-size:14px}
+  body:has(#gp:not([hidden])) #hint{bottom:calc(116px + var(--sb))}
+  #toast{top:30%}
+  #feed{left:calc(var(--sl) + 128px);bottom:calc(62px + var(--sb));max-width:min(40vw,320px);font-size:12px}
+  #cp,#emp{left:calc(var(--sl) + 128px);transform:none;bottom:calc(62px + var(--sb));width:min(54vw,430px)}
+  #cl,#gcl{max-height:min(30vh,110px)}
+  #chp{width:min(94vw,640px);max-height:calc(100vh - 20px);overflow:auto;grid-template-columns:repeat(5,1fr);padding:10px;gap:6px}
+  #chp button{padding:5px 2px}#chp i{font-size:22px}
+  /* o'yin stollari: chapda sarlavha/holat/chat, o'ngda taxta */
+  #gm{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);grid-template-rows:auto auto 1fr;grid-template-areas:"h b" "s b" "c b";align-content:start;align-items:start;justify-items:stretch;column-gap:16px;row-gap:8px;
+    padding:calc(8px + env(safe-area-inset-top,0px)) var(--sr) 8px var(--sl)}
+  #gm .gh{grid-area:h;width:auto}
+  #gs{grid-area:s;width:auto;text-align:left}
+  #gb{grid-area:b;width:auto;max-height:calc(100vh - 16px);overflow:auto;align-content:start}
+  #gc{grid-area:c;width:auto;align-self:end;margin-top:0}
+  .bd{width:min(100%,calc(100vh - 100px));margin:0 auto}
+  .bd.c4{width:min(100%,calc((100vh - 100px)*7/6))}
+  .bd button{font-size:min(5.5vh,28px)}
+  .cd{padding:9px 5px}
+  .big{font-size:22px}
+  /* Mafiya: kengroq va past */
+  #mf{padding:calc(8px + env(safe-area-inset-top,0px)) var(--sr) 12px var(--sl)}
+  #mf .gh{width:min(100%,640px)}.mfc{width:min(100%,640px)}
+  .lg{max-height:90px}
+}
+/* Telefon yotganda ekran klaviaturasi ochilsa: chat tepaga ko'tariladi */
+body.kb #cp{top:calc(6px + var(--vvt,0px));bottom:auto;left:50%;transform:translateX(-50%);width:min(88vw,520px)}
+body.kb #cl{max-height:48px}body.kb #cnick{display:none}
+body.kb #hint,body.kb #feed{display:none}
 </style>
 
 <div id="stage"></div>
@@ -176,10 +235,16 @@ button{font:inherit;color:inherit}
   </button>
 </div>
 
-<div id="side" class="hud"><button id="bch" title="Personaj">🐾</button><button id="bem" title="Harakat">😄</button><button id="bcc" title="Yozuvli chat">💬<span class="bg" id="bgc"></span></button><button id="bmic" title="Mikrofon">🎤</button><button id="bmute" title="Ovozni o'chirish/yoqish" hidden>🔊</button><button id="bmf" title="Mafiya">🎭</button></div><div id="feed"></div><div id="cp" hidden><div id="cl"></div><div id="cnick">Ism: <input id="cni" maxlength="16" placeholder="Mehmon" autocomplete="off"></div><div class="cr"><input id="cin" maxlength="160" placeholder="Xabar yozing…" autocomplete="off" enterkeyhint="send"><button id="cis" type="button">➤</button></div></div><div id="emp" hidden></div><div id="chp" hidden></div><div id="mf" hidden></div>
+<div id="side" class="hud"><button id="bch" title="Personaj">🐾</button><button id="bem" title="Harakat">😄</button><button id="bcc" title="Yozuvli chat">💬<span class="bg" id="bgc"></span></button><button id="bmic" title="Mikrofon">🎤</button><button id="bmute" title="Ovozni o'chirish/yoqish" hidden>🔊</button><button id="bmf" title="Mafiya">🎭</button><button id="bfs" title="To'liq ekran (gorizontal)" hidden>⛶</button></div><div id="feed"></div><div id="cp" hidden><div id="cl"></div><div id="cnick">Ism: <input id="cni" maxlength="16" placeholder="Mehmon" autocomplete="off"></div><div class="cr"><input id="cin" maxlength="160" placeholder="Xabar yozing…" autocomplete="off" enterkeyhint="send"><button id="cis" type="button">➤</button></div></div><div id="emp" hidden></div><div id="chp" hidden></div><div id="mf" hidden></div>
 <div id="gp" class="hud" hidden></div>
 <div id="gm" hidden><div class="gh"><b id="gt"></b><button id="gx" type="button">Chiqish</button></div><div id="gs"></div><div id="gb"></div><div id="gc" hidden><div id="gcl"></div><div class="cr"><input id="gci" maxlength="160" placeholder="Raqibga xabar…" autocomplete="off" enterkeyhint="send"><button id="gcs" type="button">➤</button></div></div></div>
 <div id="loading"><div class="box"><div class="bar"></div><p>Muzey tayyorlanmoqda…</p></div></div>
+<div id="rot" role="dialog" aria-label="Telefonni yoting"><div class="box">
+  <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="20" y="6" width="24" height="42" rx="4"/><path d="M30 42h4"/></svg>
+  <p>Telefonni yoting</p>
+  <small>O'yin gorizontal (yotiq) holatda qulayroq ishlaydi.</small>
+  <button id="rotgo" type="button">Baribir tik davom etish</button>
+</div></div>
 
 <script src="config.js"></script>
 <script src="net.js"></script>
@@ -1499,6 +1564,44 @@ function start(){
   }
 }
 requestAnimationFrame(function(){setTimeout(start,30);});
+})();
+</script>
+<script>
+/* Gorizontal rejim: aylantirish ogohlantirishi, to'liq ekran + yotiq qulf, klaviatura */
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var de=document.documentElement,so=screen.orientation;
+function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement;}
+function lockLand(){try{if(so&&so.lock){var p=so.lock("landscape");if(p&&p.catch)p.catch(function(){});}}catch(_){}}
+function unlock(){try{if(so&&so.unlock)so.unlock();}catch(_){}}
+$("rotgo").onclick=function(){$("rot").classList.add("off");};
+/* yotganda ogohlantirish qayta tik holat uchun tiklanadi */
+var mql=window.matchMedia&&window.matchMedia("(orientation:landscape)");
+function onRot(){if(mql&&mql.matches)$("rot").classList.remove("off");}
+if(mql){if(mql.addEventListener)mql.addEventListener("change",onRot);else if(mql.addListener)mql.addListener(onRot);}
+window.addEventListener("orientationchange",function(){setTimeout(function(){window.dispatchEvent(new Event("resize"));},250);});
+/* to'liq ekran tugmasi (iPhone Safari bu API'ni bermaydi — u yerda tugma ko'rinmaydi) */
+var bfs=$("bfs"),canFs=!!(de.requestFullscreen||de.webkitRequestFullscreen);
+if(canFs&&!/PingvinApp/.test(navigator.userAgent))bfs.hidden=false;
+bfs.onclick=function(){
+  if(fsEl()){(document.exitFullscreen||document.webkitExitFullscreen).call(document);unlock();return;}
+  var r=(de.requestFullscreen||de.webkitRequestFullscreen).call(de);
+  var go=function(){lockLand();};
+  if(r&&r.then)r.then(go,go);else go();
+};
+document.addEventListener("fullscreenchange",function(){bfs.classList.toggle("on",!!fsEl());if(!fsEl())unlock();});
+/* klaviatura ochilganda (past ekranda) chatni tepaga ko'taramiz */
+var vv=window.visualViewport;
+function kb(){
+  var inp=document.activeElement&&/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+  var h=vv?vv.height:window.innerHeight;
+  var on=!!inp&&h<260&&window.matchMedia("(orientation:landscape)").matches&&!$("cp").hidden;
+  document.body.classList.toggle("kb",on);
+  if(vv)de.style.setProperty("--vvt",vv.offsetTop+"px");
+}
+if(vv){vv.addEventListener("resize",kb);vv.addEventListener("scroll",kb);}
+document.addEventListener("focusin",kb);document.addEventListener("focusout",function(){setTimeout(kb,50);});
 })();
 </script>
 

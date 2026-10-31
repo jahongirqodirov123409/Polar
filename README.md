@@ -81,3 +81,8 @@ Mikrofon: ilova birinchi marta 🎤 bosilganda Android ruxsat so'raydi.
 - `public/net.js` — serverga ulanish; `public/voice.js` — mikrofon (WebRTC)
 - `public/config.js` — APK/TURN sozlamalari; `public/sw.js` — tez ochilish keshi
 - `android/` — APK loyihasi; `.github/workflows/apk.yml` — bulutda APK yig'ish
+
+## Gorizontal rejim
+- Interfeys telefon yotganda (landscape) ixchamlashadi: joystik/tugmalar, chat, o'yin stollari (chapda holat va chat, o'ngda taxta), Mafiya.
+- Tik holatda "Telefonni yoting" ekrani chiqadi (o'tkazib yuborish mumkin).
+- ⛶ tugmasi to'liq ekranga o'tkazadi va Android'da yotiq holatni qulflaydi. PWA manifest va APK (`sensorLandscape`) ham yotiq.
